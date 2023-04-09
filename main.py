@@ -1,61 +1,52 @@
-import alpaqa as pa
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
-from scipy.optimize import minimize
 
+from controller import mpc_controller, straight_line_controller
 from dynamics import KinematicBicyclePacejka
-from simulation import simulate_motion
+from road import Road
+from simulation import plot_results, simulate_motion, plot_trajectory
 
+n, dt, v_ref = 3, 0.1, 1.0
 
-def mpc_controller(model, current_state, target_state, N=2, dt=0.1):
-    # Define the objective function
-    def cost_fn(u_flat, *args):
-        states, target_state, N, dt = args
-        cost = 0
-        u = u_flat.reshape(2, N)
-        for i in range(N):
-            if i == 0:
-                x = np.copy(current_state)
-            else:
-                x += model(states[i - 1], u[:, i - 1], dt * (i - 1)) * dt
-            states[i] = x
-            cost += np.sum((x - target_state) ** 2)
-        return cost
-
-    # Initialize states and control inputs
-    states = [None] * N
-    u_flat = np.zeros((N * 2,))
-
-    # Solve the optimization problem
-    result = minimize(cost_fn, u_flat, args=(states, target_state, N, dt))
-    # result = pa.PANOCSolver(cost_fn )
-    u = result.x.reshape(2, N)
-
-    # Return the first optimal control inputs
-    return u[:, 0]
+model = KinematicBicyclePacejka()
+road = Road()
 
 
 def pacejka_model(t_start, t_end, t_step):
-    model = KinematicBicyclePacejka()
 
     def obj_fun(t, x):
-        # u = calc_input(t, x)
-        n, dt, v_ref = 2, 0.1, 1.0
         u = mpc_controller(
             model=model,
             current_state=x,
-            target_state=np.array([x[0] + v_ref * dt * n, 0, 0, v_ref, 0, 0]),
+            road=road,
+            target_velocity=1,
             N=n,
             dt=dt
         )
+        # u = straight_line_controller(
+        #     current_state=x,
+        #     road=road
+        # )
+
         cost = model(x, u, t)
+        _, closest_point = road.find_nearest_point(
+            np.array(x[0], x[1])
+        )
+        print("(", x[0], ", ", x[1], ")")
+        print("(", closest_point[0], ", ", closest_point[1], ")")
+        print("v = ", np.sqrt(x[3] ** 2 + x[4] ** 2))
+        print("u = (", u[0], ", ", u[1], ")")
+        print()
+        print(t)
+        print()
         return cost
 
     x0 = np.array([
         0,  # x
         0,  # y
         0,  # φ
-        0.1,  # vx
+        1,  # vx
         0,  # vy
         0  # ω
     ])
@@ -69,10 +60,10 @@ def pacejka_model(t_start, t_end, t_step):
         t_eval=t_step
     )
 
-    return model, res
+    return res
 
 
-def animations_and_graphs(model, res):
+def animations_and_graphs(res):
     t = res.t
     x = res.y[0, :]
     y = res.y[1, :]
@@ -82,39 +73,53 @@ def animations_and_graphs(model, res):
     ω = res.y[5, :]
 
     u = np.zeros([2, t.size])
-    n, dt, v_ref = 2, 0.1, 1.0
     for i in range(t.size):
         u[:, i] = mpc_controller(
             model=model,
             current_state=res.y[:, i],
-            target_state=np.array([res.y[0, i] + v_ref * dt * n, 0, 0, v_ref, 0, 0]),
+            road=road,
+            target_velocity=v_ref,
             N=n,
             dt=dt
         )
 
     # plot_results(t, x, y, φ, vx, vy, ω, u, "Pacejka")
-    #
+
     # plot_trajectory(x, y, φ, u, "Pacejka")
-    #
+
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
 
 
-class Road:
-
-    def __init__(
-            self,
-            left: np.array = None,
-            right: np.array = None,
-            center: np.array = None
-    ) -> None:
-        self.left = [[i / 100, -5] for i in range(1000)] if left is None else left
-        self.right = [[i / 100, 5] for i in range(1000)] if right is None else right
-        self.center = [[i / 100, 0] for i in range(1000)] if center is None else center
-
-
 if __name__ == '__main__':
-    t_start, t_end, t_step = 0, 10, 0.01
+    t_start, t_end, t_step = 0, 2, 0.1
 
-    [model, res] = pacejka_model(t_start, t_end, t_step)
+    res = pacejka_model(t_start, t_end, t_step)
+    #
+    # t = res.t
+    # x = res.y[0, :]
+    # y = res.y[1, :]
+    # φ = res.y[2, :]
+    # vx = res.y[3, :]
+    # vy = res.y[4, :]
+    # ω = res.y[5, :]
+    # plt.figure()
+    # plt.title("Test")
+    # plt.quiver(x, y, np.cos(φ), np.sin(φ), scale=100, color='r', width=0.002)
+    # plt.quiver(x, y, np.cos(φ), np.sin(φ), scale=100, color='y', width=0.002)
+    # plt.plot(x, y, 'r')
+    #
+    #
+    # theta = np.linspace(0, 2 * np.pi, 1000)
+    # radius = 5
+    # center = [0, 0]
+    #
+    # xc = radius * np.cos(theta) + center[0]
+    # yc = radius * np.sin(theta) + center[1]
+    # yc += 5
+    # plt.plot(xc, yc, 'k')
+    #
+    # manager = plt.get_current_fig_manager()
+    # manager.full_screen_toggle()
+    # plt.show()
 
-    animations_and_graphs(model, res)
+    animations_and_graphs(res)
