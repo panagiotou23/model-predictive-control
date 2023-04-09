@@ -1,4 +1,7 @@
+from ctypes import Union
+
 import numpy as np
+from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 
@@ -6,11 +9,63 @@ from controller import mpc_controller, straight_line_controller
 from dynamics import KinematicBicyclePacejka
 from road import Road
 from simulation import plot_results, simulate_motion, plot_trajectory
+import alpaqa as pa
+import casadi as cs
+
 
 n, dt, v_ref = 3, 0.1, 1.0
 
 model = KinematicBicyclePacejka()
 road = Road()
+
+def alpaqa_test():
+    x1 = cs.SX.sym("x1")
+
+    f_expr = (1 - x1) ** 2
+    g_expr = cs.vertcat(
+        x1
+    )
+
+    x = cs.vertcat(x1)
+    f = cs.Function("f", [x], [f_expr])
+    g = cs.Function("g", [x], [g_expr])
+
+    prob = generate_and_compile_casadi_problem(f, g)
+
+    prob.D.lowerbound = [-np.inf]
+    prob.D.upperbound = [0] 
+
+    inner_solver = pa.StructuredPANOCLBFGSSolver(
+        panoc_params={
+            'max_iter': 1000,
+            'stop_crit': pa.PANOCStopCrit.ApproxKKT,
+        },
+        lbfgs_params={
+            'memory': 10,
+        },
+    )
+
+    solver = pa.ALMSolver(
+        alm_params={
+            'ε': 1e-10,
+            'δ': 1e-10,
+            'Σ_0': 0,
+            'σ_0': 2,
+            'Δ': 20,
+        },
+        inner_solver=inner_solver
+    )
+
+    x0 = np.array([-1.5])
+    y0 = np.zeros((prob.m,))
+
+    x_sol, y_sol, stats = solver(prob, x0, y0)
+
+    # Print the results
+    print(stats["status"])
+    print(f"Solution:      {x_sol}")
+    print(f"Multipliers:   {y_sol}")
+    print(f"Cost:          {prob.eval_f(x_sol):.5f}")
 
 
 def pacejka_model(t_start, t_end, t_step):
@@ -89,37 +144,11 @@ def animations_and_graphs(res):
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
 
-
 if __name__ == '__main__':
-    t_start, t_end, t_step = 0, 2, 0.1
+    # t_start, t_end, t_step = 0, 2, 0.1
+    #
+    # res = pacejka_model(t_start, t_end, t_step)
+    #
+    # animations_and_graphs(res)
 
-    res = pacejka_model(t_start, t_end, t_step)
-    #
-    # t = res.t
-    # x = res.y[0, :]
-    # y = res.y[1, :]
-    # φ = res.y[2, :]
-    # vx = res.y[3, :]
-    # vy = res.y[4, :]
-    # ω = res.y[5, :]
-    # plt.figure()
-    # plt.title("Test")
-    # plt.quiver(x, y, np.cos(φ), np.sin(φ), scale=100, color='r', width=0.002)
-    # plt.quiver(x, y, np.cos(φ), np.sin(φ), scale=100, color='y', width=0.002)
-    # plt.plot(x, y, 'r')
-    #
-    #
-    # theta = np.linspace(0, 2 * np.pi, 1000)
-    # radius = 5
-    # center = [0, 0]
-    #
-    # xc = radius * np.cos(theta) + center[0]
-    # yc = radius * np.sin(theta) + center[1]
-    # yc += 5
-    # plt.plot(xc, yc, 'k')
-    #
-    # manager = plt.get_current_fig_manager()
-    # manager.full_screen_toggle()
-    # plt.show()
-
-    animations_and_graphs(res)
+    alpaqa_test()

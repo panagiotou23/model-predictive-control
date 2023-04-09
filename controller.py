@@ -5,6 +5,44 @@ import alpaqa as pa
 from road import Road
 
 
+def mpc_controller_alpaqa(model, current_state, road, target_velocity, N=2, dt=0.1):
+    # Define the objective function
+    def cost_fn(u_flat, *args):
+        states, N, dt, current_state, road, target_velocity = args
+        cost = 0
+        u = u_flat.reshape(2, N)
+        cte_weight = 100  # tuning parameter for CTE penalty
+        heading_weight = 10  # tuning parameter for heading penalty
+        velocity_weight = 10  # tuning parameter for velocity penalty
+        for i in range(N):
+            if i == 0:
+                x = np.copy(current_state)
+            else:
+                x += model(states[i - 1], u[:, i - 1], dt * (i - 1)) * dt
+            states[i] = x
+
+            _, heading_error, cte = road.compute_errors(
+                np.array(x[0], x[1]),
+                x[2]
+            )
+
+            velocity = np.sqrt(x[3] ** 2 + x[4] ** 2)
+            # Add penalty terms to the cost function
+            cost += cte_weight * cte ** 2 + heading_weight * heading_error ** 2 \
+                + velocity_weight * velocity
+        return cost
+
+    # Initialize states and control inputs
+    states = [None] * N
+    u_flat = np.zeros((N * 2,))
+
+    # Solve the optimization problem
+
+
+    # Return the first optimal control inputs
+    return u[:, 0]
+
+
 def mpc_controller(model, current_state, road, target_velocity, N=2, dt=0.1):
     # Define the objective function
     def cost_fn(u_flat, *args):
