@@ -5,8 +5,8 @@ from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 
+from car_dynamics import KinematicBicyclePacejka
 from controller import mpc_controller, straight_line_controller
-from dynamics import KinematicBicyclePacejka
 from road import Road
 from simulation import plot_results, simulate_motion, plot_trajectory
 import alpaqa as pa
@@ -19,54 +19,48 @@ model = KinematicBicyclePacejka()
 road = Road()
 
 def alpaqa_test():
-    x1 = cs.SX.sym("x1")
+    # Test
+    vehicle_model = KinematicBicyclePacejka()
 
-    f_expr = (1 - x1) ** 2
-    g_expr = cs.vertcat(
-        x1
-    )
+    vehicle_f_d = vehicle_model.dynamics()
+    vehicle_y_null, vehicle_u_null = vehicle_model.state_0, vehicle_model.u_0
+    vehicle_param = np.array([
+        9.7e-2,  # length
+        4.7e-2,  # axis_front
+        5e-2,  # axis_rear
+        0.09,  # front
+        0.07,  # rear
+        8e-2,  # width
+        5.5e-2,  # height
+        0.1735,  # mass
+        18.3e-5,  # inertia
+        0.32,  # max_steer
+        1.0,  # max_drive
+        0.268,  # bf
+        2.165,  # cf
+        3.47,  # df
+        0.242,  # br
+        2.38,  # cr
+        2.84,  # dr
+        0.266,  # cm1
+        0.1,  # cm2
+        0.1025,  # cr0
+        0.1629,  # cr1
+        0.0011  # cr2
+    ]).T
 
-    x = cs.vertcat(x1)
-    f = cs.Function("f", [x], [f_expr])
-    g = cs.Function("g", [x], [g_expr])
+    N_sim = 180
+    u_test = np.array([[1, i/N_sim] for i in range(0, N_sim)]).T
+    y_test = vehicle_model.simulate(N_sim, vehicle_y_null, u_test, vehicle_param)
 
-    prob = generate_and_compile_casadi_problem(f, g)
+    y_res = np.array(y_test)
 
-    prob.D.lowerbound = [-np.inf]
-    prob.D.upperbound = [0] 
+    x = np.array(y_res[0:N_sim * 6:6]).T
+    y = np.array(y_res[1:N_sim * 6:6]).T
 
-    inner_solver = pa.StructuredPANOCLBFGSSolver(
-        panoc_params={
-            'max_iter': 1000,
-            'stop_crit': pa.PANOCStopCrit.ApproxKKT,
-        },
-        lbfgs_params={
-            'memory': 10,
-        },
-    )
-
-    solver = pa.ALMSolver(
-        alm_params={
-            'ε': 1e-10,
-            'δ': 1e-10,
-            'Σ_0': 0,
-            'σ_0': 2,
-            'Δ': 20,
-        },
-        inner_solver=inner_solver
-    )
-
-    x0 = np.array([-1.5])
-    y0 = np.zeros((prob.m,))
-
-    x_sol, y_sol, stats = solver(prob, x0, y0)
-
-    # Print the results
-    print(stats["status"])
-    print(f"Solution:      {x_sol}")
-    print(f"Multipliers:   {y_sol}")
-    print(f"Cost:          {prob.eval_f(x_sol):.5f}")
-
+    plt.figure()
+    plt.plot(x, y, 'k')
+    plt.show()
 
 def pacejka_model(t_start, t_end, t_step):
 
@@ -140,7 +134,7 @@ def animations_and_graphs(res):
 
     # plot_results(t, x, y, φ, vx, vy, ω, u, "Pacejka")
 
-    # plot_trajectory(x, y, φ, u, "Pacejka")
+    plot_trajectory(x, y, φ, u, "Pacejka")
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
 
