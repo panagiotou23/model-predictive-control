@@ -99,9 +99,12 @@ class HangingChain:
         else:
             return u.reshape((self.dim, u.shape[0] // self.dim))
 
-    def simulate(self, N_sim: int, y_0: np.ndarray, u: Union[np.ndarray, list,
-    cs.SX.sym],
-                 p: Union[np.ndarray, list, cs.SX.sym]):
+    def simulate(
+            self, N_sim: int,
+            y_0: np.ndarray,
+            u: Union[np.ndarray, list, cs.SX.sym],
+            p: Union[np.ndarray, list, cs.SX.sym]
+    ):
         if isinstance(u, list):
             u = np.array(u)
         if isinstance(u, np.ndarray):
@@ -336,12 +339,12 @@ ani = mpl.animation.FuncAnimation(fig,
                                   frames=1 + N_dist + N_sim)
 
 # Export the animation
-out = join(dirname(__file__), 'hanging-chain.html')
-os.makedirs(dirname(out), exist_ok=True)
-with open(out, "w") as f:
-    f.write('<center>')
-    f.write(ani.to_jshtml())
-    f.write('</center>')
+# out = join(dirname(__file__), 'hanging-chain.html')
+# os.makedirs(dirname(out), exist_ok=True)
+# with open(out, "w") as f:
+#     f.write('<center>')
+#     f.write(ani.to_jshtml())
+#     f.write('</center>')
 
 # Show the animation
 plt.show()
