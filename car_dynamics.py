@@ -92,7 +92,7 @@ class KinematicBicyclePacejka:
             0,  # x
             0,  # y
             0,  # φ
-            1,  # vx
+            0.1,  # vx
             0,  # vy
             0  # ω
         ])
@@ -159,6 +159,16 @@ class KinematicBicyclePacejka:
 
         return self.f_d
 
+    def input_to_matrix(self, u):
+        """
+        Reshape the input signal from a vector into a dim × N_horiz matrix (note
+        that CasADi matrices are stored column-wise and NumPy arrays row-wise)
+        """
+        if isinstance(u, np.ndarray):
+            return u.reshape((self.u.shape[0], u.shape[0] // self.u.shape[0]), order='F')
+        else:
+            return u.reshape((self.u.shape[0], u.shape[0] // self.u.shape[0]))
+
     def simulate(
             self,
             N_sim: int,
@@ -168,15 +178,11 @@ class KinematicBicyclePacejka:
     ):
         return self.f_d.mapaccum(N_sim)(y_0, u, p)
 
-    def generate_cost_fun(self, α=25, β=1, γ=0.01):
-        xt = cs.SX.sym("yt")
-        yt = cs.SX.sym("yt")
-        φt = cs.SX.sym("yt")
-        ut = cs.SX.sym("ut")
+    def generate_cost_fun(self, α=25):
+        vx = cs.SX.sym("vx")
 
-        _, heading_error, pos_error = self.road.compute_errors(
-            np.array([xt, yt]), φt
-        )
+        target_v = cs.SX.sym("target_v")
 
-        L_cost = α * pos_error ** 2 + β * heading_error ** 2 + γ * ut ** 2
-        return cs.Function("L_cost", [xt, yt, φt, ut], [L_cost])
+        L_cost = α * (vx - target_v) ** 2
+        print(L_cost)
+        return cs.Function("L_cost", [vx, target_v], [L_cost])

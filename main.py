@@ -6,25 +6,28 @@ from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
 
 from car_dynamics import KinematicBicyclePacejka
-from controller import mpc_controller, straight_line_controller
+from controller import mpc_controller, straight_line_controller, MPCController
 from road import Road
 from simulation import plot_results, simulate_motion, plot_trajectory
 import alpaqa as pa
 import casadi as cs
-
 
 n, dt, v_ref = 3, 0.1, 1.0
 
 model = KinematicBicyclePacejka()
 road = Road()
 
+
 def alpaqa_test():
     # Test
-    vehicle_model = KinematicBicyclePacejka()
+    model = KinematicBicyclePacejka()
 
-    vehicle_f_d = vehicle_model.dynamics()
-    vehicle_y_null, vehicle_u_null = vehicle_model.state_0, vehicle_model.u_0
-    vehicle_param = np.array([
+    N_sim = 180
+    N_horiz = 2
+    u_dim = 1
+    f_d = model.dynamics()
+    y_null, u_null = model.state_0, model.u_0
+    param = np.array([
         9.7e-2,  # length
         4.7e-2,  # axis_front
         5e-2,  # axis_rear
@@ -49,21 +52,65 @@ def alpaqa_test():
         0.0011  # cr2
     ]).T
 
-    N_sim = 180
-    u_test = np.array([[1, i/N_sim] for i in range(0, N_sim)]).T
-    y_test = vehicle_model.simulate(N_sim, vehicle_y_null, u_test, vehicle_param)
+    L_cost = model.generate_cost_fun()  # stage cost
+    y_init = cs.SX.sym("y_init", *y_null.shape)  # initial state
+    U = cs.SX.sym("U", u_dim * N_horiz)  # control signals over horizon
+    mpc_param = cs.vertcat(y_init, model.params)  # all parameters
+    U_mat = model.input_to_matrix(U)  # Input as dim by N_horiz matrix
 
-    y_res = np.array(y_test)
+    # Cost
+    mpc_sim = model.simulate(N_horiz, y_init, U_mat, model.params)
+    mpc_cost = 0
+    for n in range(N_horiz):  # Apply the stage cost function to each stage
+        y_n = mpc_sim[:, n]
+        mpc_cost += L_cost(y_n[2], v_ref)
+    mpc_cost_fun = cs.Function('f_mpc', [U, mpc_param], [mpc_cost])
 
-    x = np.array(y_res[0:N_sim * 6:6]).T
-    y = np.array(y_res[1:N_sim * 6:6]).T
+    # Constraints
+    constr = []
+    for n in range(N_horiz):  # For each stage,
+        y_n = mpc_sim[:, n]
+        constr += [y_n[0] ** 2 - 20]
+        constr += [y_n[1] ** 2 - 0.1]
+        constr += [y_n[2] ** 2 - 0.1]
+        constr += [y_n[3] ** 2 - 2]
+        constr += [y_n[4] ** 2 - 0.1]
+        constr += [y_n[5] ** 2 - 0.1]
+    mpc_constr_fun = cs.Function("g", [U, mpc_param], [cs.vertcat(*constr)])
+
+    mpc_cost_fun.disp()
+    print()
+    mpc_constr_fun.disp()
+    print()
+
+    prob = generate_and_compile_casadi_problem(mpc_cost_fun, mpc_constr_fun)
+    prob.C.lowerbound = -1 * np.ones((u_dim * N_horiz,))
+    prob.C.upperbound = +1 * np.ones((u_dim * N_horiz,))
+    prob.D.lowerbound = np.zeros((6 * N_horiz,))
+
+    y_n = model.state_0
+    y_mpc = np.empty((y_n.shape[0], N_sim))
+    controller = MPCController(model, prob, N_horiz)
+    for n in range(N_sim):
+        # Solve the optimal control problem
+        u_n = controller(y_n)
+        # Apply the first optimal control signal to the system and simulate for
+        # one time step, then update the state
+        y_n = model.simulate(1, y_n, [u_n[0], 0], param).T
+        y_mpc[:, n] = y_n
+        print(u_n)
+
+    print(controller.tot_it, controller.failures)
 
     plt.figure()
-    plt.plot(x, y, 'k')
+    plt.plot(
+        y_mpc[0, :],
+        y_mpc[1, :]
+    )
     plt.show()
 
-def pacejka_model(t_start, t_end, t_step):
 
+def pacejka_model(t_start, t_end, t_step):
     def obj_fun(t, x):
         u = mpc_controller(
             model=model,
@@ -137,6 +184,7 @@ def animations_and_graphs(res):
     plot_trajectory(x, y, φ, u, "Pacejka")
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
+
 
 if __name__ == '__main__':
     # t_start, t_end, t_step = 0, 2, 0.1
