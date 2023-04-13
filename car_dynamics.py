@@ -22,7 +22,7 @@ class KinematicBicyclePacejka:
         self.d = cs.SX.sym("d")
         self.δ = cs.SX.sym("δ")
 
-        self.state = vc(
+        self.X = vc(
             self.x,
             self.y,
             self.φ,
@@ -88,7 +88,7 @@ class KinematicBicyclePacejka:
             self.cr2
         )
 
-        self.state_0 = np.array([
+        self.X_0 = np.array([
             0,  # x
             0,  # y
             0,  # φ
@@ -97,8 +97,6 @@ class KinematicBicyclePacejka:
             0  # ω
         ])
         self.u_0 = np.array([0, 0])
-
-        self.road = Road()
 
         self.f = None
         self.f_d = None
@@ -141,7 +139,7 @@ class KinematicBicyclePacejka:
             (ffy * lf * cs.cos(δ) - fry * lr) / iz
         )
 
-        y, u, p = self.state, self.u, self.params
+        y, u, p = self.X, self.u, self.params
         self.f = cs.Function("f", [y, u, p], [f_expr], ["y", "u", "p"], ["y'"])
 
         # Discretize dynamics y[k+1] = f_d(y[k], u[k]; p)
@@ -178,11 +176,13 @@ class KinematicBicyclePacejka:
     ):
         return self.f_d.mapaccum(N_sim)(y_0, u, p)
 
-    def generate_cost_fun(self, α=25):
+    def generate_cost_fun(self, α=25, β=100):
+        y = cs.SX.sym("y")
         vx = cs.SX.sym("vx")
+        vy = cs.SX.sym("vy")
+        X = vc(y, vx, vy)
 
         target_v = cs.SX.sym("target_v")
 
-        L_cost = α * (vx - target_v) ** 2
-        print(L_cost)
-        return cs.Function("L_cost", [vx, target_v], [L_cost])
+        L_cost = α * (cs.sqrt(vx**2 + vy**2) - target_v) ** 2 + β * y ** 2
+        return cs.Function("L_cost", [X, target_v], [L_cost])

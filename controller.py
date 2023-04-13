@@ -13,10 +13,10 @@ class MPCController:
         self.problem = problem
 
         self.N_horiz = 12 if N_horiz is None else N_horiz
-        self.u_dim = 1
+        self.u_dim = 2
         self.tot_it = 0
         self.failures = 0
-        self.U = np.tile([1], N_horiz)
+        self.U = np.tile([1, 0], N_horiz)
         self.λ = np.zeros((6 * N_horiz,))
 
         self.solver = pa.ALMSolver(

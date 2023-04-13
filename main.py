@@ -4,6 +4,7 @@ import numpy as np
 from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
+from casadi import vertcat as vc
 
 from car_dynamics import KinematicBicyclePacejka
 from controller import mpc_controller, straight_line_controller, MPCController
@@ -19,14 +20,65 @@ road = Road()
 
 
 def alpaqa_test():
-    # Test
-    model = KinematicBicyclePacejka()
+    x = cs.SX.sym("x")
+    y = cs.SX.sym("y")
+    c = cs.SX.sym("c", 3)
 
+    X = cs.vertcat(x, y)
+
+    f_expr = (x + y) ** 2 + c[0] * x * y - c[1] * x + c[2] * y
+    f = cs.Function("f", [X, c], [f_expr])
+
+    g_expr = x + y
+    g = cs.Function("g", [X, c], [g_expr])
+
+    prob = generate_and_compile_casadi_problem(f, g)
+    prob.C.lowerbound = - 10 * np.ones((2, 1))
+    prob.C.upperbound = 10 * np.ones((2, 1))
+    prob.D.lowerbound = np.zeros((1, 1))
+
+    prob.param = np.array([1, 1, 3])
+    # %% NLP solver
+    from datetime import timedelta
+
+    solver = pa.ALMSolver(
+        alm_params={
+            'ε': 1e-4,
+            'δ': 1e-4,
+            'Σ_0': 1e5,
+            'max_time': timedelta(seconds=0.5),
+        },
+        inner_solver=pa.StructuredPANOCLBFGSSolver(
+            panoc_params={
+                'stop_crit': pa.ProjGradNorm2,
+                'max_time': timedelta(seconds=0.2),
+                'hessian_step_size_heuristic': 15,
+            },
+            lbfgs_params={'memory': 12},
+        ),
+    )
+
+    sol = np.array([2, -1])
+    λ = np.zeros((1, 1))
+    sol, λ, stats = solver(prob, sol, λ)
+
+    # Print some solver statistics
+    print(stats['status'], stats['outer_iterations'],
+          stats['inner']['iterations'], stats['elapsed_time'],
+          stats['inner_convergence_failures'])
+
+    print(np.linalg.norm(λ))
+    print(sol)
+
+
+def alpaqa_vehicle_test():
+    # Test
     N_sim = 180
-    N_horiz = 2
-    u_dim = 1
+    N_horiz = 12
+    u_dim = 2
     f_d = model.dynamics()
-    y_null, u_null = model.state_0, model.u_0
+    y_null, u_null = model.X_0, model.u_0
+    max_drive, max_steer = 1.0, 0.32
     param = np.array([
         9.7e-2,  # length
         4.7e-2,  # axis_front
@@ -37,8 +89,8 @@ def alpaqa_test():
         5.5e-2,  # height
         0.1735,  # mass
         18.3e-5,  # inertia
-        0.32,  # max_steer
-        1.0,  # max_drive
+        max_steer,  # max_steer
+        max_drive,  # max_drive
         0.268,  # bf
         2.165,  # cf
         3.47,  # df
@@ -63,7 +115,8 @@ def alpaqa_test():
     mpc_cost = 0
     for n in range(N_horiz):  # Apply the stage cost function to each stage
         y_n = mpc_sim[:, n]
-        mpc_cost += L_cost(y_n[2], v_ref)
+        X = vc(y_n[1], y_n[3], y_n[4])
+        mpc_cost += L_cost(X, v_ref)
     mpc_cost_fun = cs.Function('f_mpc', [U, mpc_param], [mpc_cost])
 
     # Constraints
@@ -84,20 +137,22 @@ def alpaqa_test():
     print()
 
     prob = generate_and_compile_casadi_problem(mpc_cost_fun, mpc_constr_fun)
-    prob.C.lowerbound = -1 * np.ones((u_dim * N_horiz,))
-    prob.C.upperbound = +1 * np.ones((u_dim * N_horiz,))
-    prob.D.lowerbound = np.zeros((6 * N_horiz,))
+    prob.C.lowerbound = np.tile([-max_drive, -max_steer], N_horiz)
+    prob.C.upperbound = np.tile([max_drive, max_steer], N_horiz)
+    # prob.D.lowerbound = np.zeros((6 * N_horiz,))
 
-    y_n = model.state_0
+    y_n = model.X_0
     y_mpc = np.empty((y_n.shape[0], N_sim))
+    prob.param = np.concatenate((y_n, param))
     controller = MPCController(model, prob, N_horiz)
     for n in range(N_sim):
         # Solve the optimal control problem
         u_n = controller(y_n)
         # Apply the first optimal control signal to the system and simulate for
         # one time step, then update the state
-        y_n = model.simulate(1, y_n, [u_n[0], 0], param).T
+        y_n = model.simulate(1, y_n, u_n, param).T
         y_mpc[:, n] = y_n
+        print(y_n)
         print(u_n)
 
     print(controller.tot_it, controller.failures)
@@ -193,4 +248,4 @@ if __name__ == '__main__':
     #
     # animations_and_graphs(res)
 
-    alpaqa_test()
+    alpaqa_vehicle_test()
