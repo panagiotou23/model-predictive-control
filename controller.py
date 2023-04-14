@@ -47,12 +47,14 @@ class MPCController:
         print(stats['status'], stats['outer_iterations'],
               stats['inner']['iterations'], stats['elapsed_time'],
               stats['inner_convergence_failures'])
+        print(self.U)
         self.tot_it += stats['inner']['iterations']
         self.failures += stats['status'] != pa.SolverStatus.Converged
         # Print the Lagrange multipliers, shows that constraints are active
-        print(np.linalg.norm(self.λ))
+        # print(np.linalg.norm(self.λ))
         # Return the optimal control signal for the first time step
-        return self.model.input_to_matrix(self.U)[:, 0]
+        # return self.model.input_to_matrix(self.U)[:, 0]
+        return self.U
 
 
 def mpc_controller(model, current_state, road, target_velocity, N=2, dt=0.1):

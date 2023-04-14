@@ -4,7 +4,7 @@ import casadi as cs
 import numpy as np
 from casadi import vertcat as vc
 
-from road import Road
+from road_casadi import Road
 
 
 class KinematicBicyclePacejka:
@@ -92,11 +92,14 @@ class KinematicBicyclePacejka:
             0,  # x
             0,  # y
             0,  # φ
-            0.1,  # vx
+            0.3,  # vx
             0,  # vy
             0  # ω
         ])
         self.u_0 = np.array([0, 0])
+
+        self.centerline_size = 100
+        self.centerline = cs.SX.sym("centerline", 100, 2)
 
         self.f = None
         self.f_d = None
@@ -176,13 +179,93 @@ class KinematicBicyclePacejka:
     ):
         return self.f_d.mapaccum(N_sim)(y_0, u, p)
 
-    def generate_cost_fun(self, α=25, β=100):
+    def wrap_to_pi(
+            self,
+            angle: cs.SX
+    ):
+        return cs.mod(angle + np.pi, 2 * np.pi) - np.pi
+
+    def find_nearest_point(
+            self,
+            size: int,
+            vehicle_position,
+            centerline
+    ):
+        min_dist = cs.inf
+        idx = -1
+        for i in range(size):
+            dist = (centerline[i, 0] - vehicle_position[0]) ** 2 + \
+                   (centerline[i, 1] - vehicle_position[1]) ** 2
+            min_dist = cs.fmin(dist, min_dist)
+            if cs.is_equal(dist, min_dist):
+                idx = i
+        return idx, centerline[idx, :]
+
+    def compute_errors(
+            self,
+            size: int,
+            vehicle_position,
+            vehicle_heading,
+            centerline_flat
+    ):
+        if isinstance(centerline_flat, np.ndarray):
+            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='C')
+        else:
+            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2))
+
+        # find the nearest point on centerline
+        idx, nearest_point = self.find_nearest_point(size, vehicle_position, centerline)
+        nearest_point = nearest_point.T
+        # calculate cross-track error
+        v_vec = vehicle_position - centerline[idx - 1]
+        w_vec = (nearest_point - centerline[idx - 1])
+        cte = (v_vec[0] * w_vec[1] - v_vec[1] * w_vec[0]) / cs.sqrt(
+            w_vec[0] ** 2 + w_vec[1 ** 2])
+
+        # calculate heading error
+        if cs.is_equal(centerline[idx + 1][0], centerline[idx][0]):
+            desired_heading = 0
+        else:
+            desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
+                                         centerline[idx + 1, 0] - centerline[idx, 0])
+        heading_error = self.wrap_to_pi(desired_heading - vehicle_heading)
+
+        # calculate positional error
+        next_point = centerline[min(idx + 1, size - 1)]
+        v_vec_next = vehicle_position - nearest_point
+        w_vec_next = next_point - nearest_point
+        pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0]) / cs.sqrt(
+            w_vec_next[0] ** 2 + w_vec_next[1 ** 2])
+
+        return cte, heading_error, pos_error
+
+    def generate_cost_fun(self, c=np.array([50, 25, 50, 25, 0.01])):
+        x = cs.SX.sym("x")
         y = cs.SX.sym("y")
+        φ = cs.SX.sym("φ")
         vx = cs.SX.sym("vx")
         vy = cs.SX.sym("vy")
-        X = vc(y, vx, vy)
+        ω = cs.SX.sym("ω")
+        X = vc(x, y, φ, vx, vy, ω)
+
+        d = cs.SX.sym("d")
+        δ = cs.SX.sym("d")
+        u = vc(d, δ)
 
         target_v = cs.SX.sym("target_v")
 
-        L_cost = α * (cs.sqrt(vx**2 + vy**2) - target_v) ** 2 + β * y ** 2
-        return cs.Function("L_cost", [X, target_v], [L_cost])
+        size = 1000
+        centerline = cs.SX.sym("centerline", size * 2, )
+        pos = vc(x, y)
+        cte, heading_error, pos_error = self.compute_errors(
+            size,
+            pos,
+            φ,
+            centerline
+        )
+
+        L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
+                 c[1] * cte ** 2 + \
+                 c[2] * heading_error ** 2 + \
+                 c[3] * pos_error ** 2
+        return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])
