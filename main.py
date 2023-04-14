@@ -76,7 +76,7 @@ def alpaqa_vehicle_test():
     N_sim = 100
     N_horiz = 12
     u_dim = 2
-    centerline_size = 1000
+    centerline_size = 100
     f_d = model.dynamics()
     y_null, u_null = model.X_0, model.u_0
 

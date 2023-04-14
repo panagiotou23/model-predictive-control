@@ -98,9 +98,6 @@ class KinematicBicyclePacejka:
         ])
         self.u_0 = np.array([0, 0])
 
-        self.centerline_size = 100
-        self.centerline = cs.SX.sym("centerline", 100, 2)
-
         self.f = None
         self.f_d = None
 
@@ -191,15 +188,18 @@ class KinematicBicyclePacejka:
             vehicle_position,
             centerline
     ):
-        min_dist = cs.inf
-        idx = -1
-        for i in range(size):
-            dist = (centerline[i, 0] - vehicle_position[0]) ** 2 + \
-                   (centerline[i, 1] - vehicle_position[1]) ** 2
-            min_dist = cs.fmin(dist, min_dist)
-            if cs.is_equal(dist, min_dist):
-                idx = i
-        return idx, centerline[idx, :]
+        # Convert inputs to matrices
+        centerline = cs.reshape(centerline, (2, size))
+        position = cs.reshape(vehicle_position, (2, 1))
+
+        # Calculate the distance from each centerline point to the vehicle position
+        distances = cs.sqrt(cs.sum1((centerline - position) ** 2).T)
+
+        # Find the index of the closest point
+        _, idx = cs.mmin(distances)
+
+        # Return the index and the closest point
+        return idx, centerline[:, idx]
 
     def compute_errors(
             self,
@@ -223,11 +223,14 @@ class KinematicBicyclePacejka:
             w_vec[0] ** 2 + w_vec[1 ** 2])
 
         # calculate heading error
-        if cs.is_equal(centerline[idx + 1][0], centerline[idx][0]):
-            desired_heading = 0
+        if idx < size - 1:
+            if cs.is_equal(centerline[idx + 1][0], centerline[idx][0]):
+                desired_heading = 0
+            else:
+                desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
+                                             centerline[idx + 1, 0] - centerline[idx, 0])
         else:
-            desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
-                                         centerline[idx + 1, 0] - centerline[idx, 0])
+            desired_heading = 0
         heading_error = self.wrap_to_pi(desired_heading - vehicle_heading)
 
         # calculate positional error
@@ -254,7 +257,7 @@ class KinematicBicyclePacejka:
 
         target_v = cs.SX.sym("target_v")
 
-        size = 1000
+        size = 100
         centerline = cs.SX.sym("centerline", size * 2, )
         pos = vc(x, y)
         cte, heading_error, pos_error = self.compute_errors(
@@ -265,7 +268,7 @@ class KinematicBicyclePacejka:
         )
 
         L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
-                 c[1] * cte ** 2 + \
+                 c[1] * y ** 2 + \
                  c[2] * heading_error ** 2 + \
-                 c[3] * pos_error ** 2
+                 c[3] * ω ** 2
         return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])
