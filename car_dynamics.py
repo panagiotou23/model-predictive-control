@@ -2,7 +2,6 @@ from ctypes import Union
 
 import casadi as cs
 import numpy as np
-from casadi import vertcat as vc
 
 from road_casadi import Road
 
@@ -22,7 +21,7 @@ class KinematicBicyclePacejka:
         self.d = cs.SX.sym("d")
         self.δ = cs.SX.sym("δ")
 
-        self.X = vc(
+        self.X = cs.vertcat(
             self.x,
             self.y,
             self.φ,
@@ -31,7 +30,7 @@ class KinematicBicyclePacejka:
             self.ω
         )
 
-        self.u = vc(
+        self.u = cs.vertcat(
             self.d,
             self.δ
         )
@@ -63,7 +62,7 @@ class KinematicBicyclePacejka:
         self.cr1 = cs.SX.sym("cr1")
         self.cr2 = cs.SX.sym("cr2")
 
-        self.params = vc(
+        self.params = cs.vertcat(
             self.length,
             self.axis_front,
             self.axis_rear,
@@ -90,9 +89,9 @@ class KinematicBicyclePacejka:
 
         self.X_0 = np.array([
             0,  # x
-            0,  # y
+            0.2,  # y
             0,  # φ
-            0.3,  # vx
+            0.1,  # vx
             0,  # vy
             0  # ω
         ])
@@ -130,7 +129,7 @@ class KinematicBicyclePacejka:
         ffy = df * cs.sin(cf * cs.arctan(bf * af))
         fry = dr * cs.sin(cr * cs.arctan(br * ar))
 
-        f_expr = vc(
+        f_expr = cs.vertcat(
             vx * cs.cos(φ) - vy * cs.sin(φ),
             vx * cs.sin(φ) + vy * cs.cos(φ),
             ω,
@@ -147,11 +146,11 @@ class KinematicBicyclePacejka:
         opt = {"tf": Ts, "simplify": True, "number_of_finite_elements": 4}
         intg = cs.integrator("intg", "rk", {
             "x": y,
-            "p": vc(u, p),
+            "p": cs.vertcat(u, p),
             "ode": f_expr
         }, opt)
 
-        f_d_expr = intg(x0=y, p=vc(u, p))["xf"]
+        f_d_expr = intg(x0=y, p=cs.vertcat(u, p))["xf"]
         self.f_d = cs.Function("f_d", [y, u, p], [f_d_expr], ["y", "u", "p"],
                                ["y+"])
 
@@ -182,30 +181,31 @@ class KinematicBicyclePacejka:
     ):
         return np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
-    def find_nearest_point(
-            self,
-            size: int,
-            vehicle_position,
-            centerline
-    ):
+    def casadi_less_than(self, a, b):
+        return (a < b) * a + (1 - (a < b)) * b
 
+    def find_nearest_point(self, size: int, vehicle_position: cs.SX, centerline: cs.SX):
         min_dist = cs.inf
-        idx = -1
-        for i in range(size):
-            dist = (centerline[i, 0] - vehicle_position[0]) ** 2 + \
-                   (centerline[i, 1] - vehicle_position[1]) ** 2
-            min_dist = cs.fmin(dist, min_dist)
-            if cs.is_equal(dist, min_dist):
-                idx = i
-        return idx, centerline[idx, :]
+        idx = cs.SX.zeros(1)
+        nearest_point = cs.SX.zeros(2)
 
+        for i in range(size):
+            point = centerline[i, :].T
+            dist = cs.mtimes((point - vehicle_position).T, (point - vehicle_position))
+
+            cond = self.casadi_less_than(dist, min_dist)
+            min_dist = cond
+            idx = (1 - (dist < min_dist)) * idx + (dist < min_dist) * i
+            nearest_point = (1 - (dist < min_dist)) * nearest_point + (dist < min_dist) * point
+
+        return idx, nearest_point
 
     def compute_errors(
             self,
             size: int,
-            vehicle_position,
-            vehicle_heading,
-            centerline_flat
+            vehicle_position: cs.SX,
+            vehicle_heading: cs.SX,
+            centerline_flat: cs.SX
     ):
         if isinstance(centerline_flat, np.ndarray):
             centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='C')
@@ -214,49 +214,50 @@ class KinematicBicyclePacejka:
 
         # find the nearest point on centerline
         idx, nearest_point = self.find_nearest_point(size, vehicle_position, centerline)
-        nearest_point = nearest_point.T
+        nearest_point = nearest_point
+        previous_point = nearest_point
+        previous_point[1] -= 0.1
+        next_point = nearest_point
+        next_point[1] += 0.1
+
         # calculate cross-track error
-        v_vec = vehicle_position - centerline[idx - 1]
-        w_vec = (nearest_point - centerline[idx - 1])
-        cte = (v_vec[0] * w_vec[1] - v_vec[1] * w_vec[0]) / cs.sqrt(
-            w_vec[0] ** 2 + w_vec[1 ** 2])
+        v_vec = vehicle_position - previous_point
+        w_vec = (nearest_point - previous_point)
+        cte = (v_vec[0] * w_vec[1] - v_vec[1] * w_vec[0])
 
         # calculate heading error
-        if idx < size - 1:
-            if cs.is_equal(centerline[idx + 1][0], centerline[idx][0]):
-                desired_heading = 0
-            else:
-                desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
-                                             centerline[idx + 1, 0] - centerline[idx, 0])
-        else:
+        if cs.is_equal(nearest_point[0], nearest_point[0]):
             desired_heading = 0
-        heading_error = self.wrap_to_pi(desired_heading - vehicle_heading)
+        else:
+            desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
+                                         centerline[idx + 1, 0] - centerline[idx, 0])
+
+        heading_error = desired_heading - vehicle_heading
 
         # calculate positional error
-        next_point = centerline[min(idx + 1, size - 1)]
         v_vec_next = vehicle_position - nearest_point
         w_vec_next = next_point - nearest_point
-        pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0]) / cs.sqrt(
-            w_vec_next[0] ** 2 + w_vec_next[1 ** 2])
-
+        pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0])
         return cte, heading_error, pos_error
 
-    def generate_cost_fun(self, centerline_size, centerline, c=np.array([50, 25, 50, 25, 0.01])):
+    def generate_cost_fun(self, centerline_size, c=np.array([10, 50, 10, 25, 0.01])):
         x = cs.SX.sym("x")
         y = cs.SX.sym("y")
         φ = cs.SX.sym("φ")
         vx = cs.SX.sym("vx")
         vy = cs.SX.sym("vy")
         ω = cs.SX.sym("ω")
-        X = vc(x, y, φ, vx, vy, ω)
+        X = cs.vertcat(x, y, φ, vx, vy, ω)
 
         d = cs.SX.sym("d")
-        δ = cs.SX.sym("d")
-        u = vc(d, δ)
+        δ = cs.SX.sym("δ")
+        u = cs.vertcat(d, δ)
+
+        centerline = cs.SX.sym("centerline", centerline_size * 2, )
 
         target_v = cs.SX.sym("target_v")
 
-        pos = vc(x, y)
+        pos = cs.vertcat(x, y)
         cte, heading_error, pos_error = self.compute_errors(
             centerline_size,
             pos,
@@ -264,8 +265,6 @@ class KinematicBicyclePacejka:
             centerline
         )
 
-        L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
-                 c[1] * y ** 2 + \
-                 c[2] * heading_error ** 2 + \
-                 c[3] * ω ** 2
-        return cs.Function("L_cost", [X, u, target_v], [L_cost])
+        L_cost = c[1] * cte ** 2 + \
+                 c[2] * heading_error ** 2
+        return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])

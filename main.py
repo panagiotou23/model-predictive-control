@@ -4,12 +4,11 @@ import numpy as np
 from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 from matplotlib import pyplot as plt
 from scipy.integrate import solve_ivp
-from casadi import vertcat as vc
 
 from car_dynamics import KinematicBicyclePacejka
-from controller import mpc_controller, straight_line_controller, MPCController
+from controller import mpc_controller, MPCController
 from road import Road
-from simulation import plot_results, simulate_motion, plot_trajectory
+from simulation import simulate_motion, plot_trajectory
 import alpaqa as pa
 import casadi as cs
 
@@ -72,11 +71,12 @@ def alpaqa_test():
 
 
 def alpaqa_vehicle_test():
+    n, dt, v_ref = 3, 0.1, 1.0
     # Test
     N_sim = 100
     N_horiz = 12
     u_dim = 2
-    centerline_size = 100
+    centerline_size = 10000
     f_d = model.dynamics()
     y_null, u_null = model.X_0, model.u_0
 
@@ -112,10 +112,11 @@ def alpaqa_vehicle_test():
     ]).T
     centerline_val = np.array([[0, i / 500 - 0.1] for i in range(centerline_size)]).ravel()
 
-    L_cost = model.generate_cost_fun(centerline_size, centerline_val)  # stage cost
+    L_cost = model.generate_cost_fun(centerline_size)  # stage cost
     y_init = cs.SX.sym("y_init", *y_null.shape)  # initial state
+    centerline = cs.SX.sym("centerline", centerline_size * 2, )
     U = cs.SX.sym("U", u_dim * N_horiz)  # control signals over horizon
-    mpc_param = cs.vertcat(y_init, model.params)  # all parameters
+    mpc_param = cs.vertcat(y_init, model.params, centerline)  # all parameters
     U_mat = model.input_to_matrix(U)  # Input as dim by N_horiz matrix
 
     # Cost
@@ -124,7 +125,7 @@ def alpaqa_vehicle_test():
     for n in range(N_horiz):  # Apply the stage cost function to each stage
         y_n = mpc_sim[:, n]
         u_n = U_mat[:, n]
-        mpc_cost += L_cost(y_n, u_n, v_ref)
+        mpc_cost += L_cost(y_n, u_n, v_ref, centerline)
     mpc_cost_fun = cs.Function('f_mpc', [U, mpc_param], [mpc_cost])
 
     # Constraints
@@ -151,11 +152,17 @@ def alpaqa_vehicle_test():
 
     y_n = model.X_0
     y_mpc = np.empty((y_n.shape[0], N_sim))
-    prob.param = np.concatenate((y_n, param))
+    prob.param = np.concatenate((y_n, param, centerline_val))
     controller = MPCController(model, prob, N_horiz)
     for n in range(N_sim):
+        pos = np.array((y_n[0], y_n[1])).reshape(2, 1)
 
-        pos = np.array((y_n[0], y_n[1])).reshape(2,)
+        print("Nearest point")
+        print(model.find_nearest_point(
+            centerline_size,
+            pos,
+            centerline_val.reshape((centerline.shape[0] // 2, 2))
+        ))
         print("Errors")
         print(model.compute_errors(
             centerline_size,
