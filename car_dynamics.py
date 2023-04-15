@@ -180,7 +180,7 @@ class KinematicBicyclePacejka:
             self,
             angle: cs.SX
     ):
-        return cs.mod(angle + np.pi, 2 * np.pi) - np.pi
+        return np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
     def find_nearest_point(
             self,
@@ -188,18 +188,17 @@ class KinematicBicyclePacejka:
             vehicle_position,
             centerline
     ):
-        # Convert inputs to matrices
-        centerline = cs.reshape(centerline, (2, size))
-        position = cs.reshape(vehicle_position, (2, 1))
 
-        # Calculate the distance from each centerline point to the vehicle position
-        distances = cs.sqrt(cs.sum1((centerline - position) ** 2).T)
+        min_dist = cs.inf
+        idx = -1
+        for i in range(size):
+            dist = (centerline[i, 0] - vehicle_position[0]) ** 2 + \
+                   (centerline[i, 1] - vehicle_position[1]) ** 2
+            min_dist = cs.fmin(dist, min_dist)
+            if cs.is_equal(dist, min_dist):
+                idx = i
+        return idx, centerline[idx, :]
 
-        # Find the index of the closest point
-        _, idx = cs.mmin(distances)
-
-        # Return the index and the closest point
-        return idx, centerline[:, idx]
 
     def compute_errors(
             self,
@@ -242,7 +241,7 @@ class KinematicBicyclePacejka:
 
         return cte, heading_error, pos_error
 
-    def generate_cost_fun(self, c=np.array([50, 25, 50, 25, 0.01])):
+    def generate_cost_fun(self, centerline_size, centerline, c=np.array([50, 25, 50, 25, 0.01])):
         x = cs.SX.sym("x")
         y = cs.SX.sym("y")
         φ = cs.SX.sym("φ")
@@ -257,11 +256,9 @@ class KinematicBicyclePacejka:
 
         target_v = cs.SX.sym("target_v")
 
-        size = 100
-        centerline = cs.SX.sym("centerline", size * 2, )
         pos = vc(x, y)
         cte, heading_error, pos_error = self.compute_errors(
-            size,
+            centerline_size,
             pos,
             φ,
             centerline
@@ -271,4 +268,4 @@ class KinematicBicyclePacejka:
                  c[1] * y ** 2 + \
                  c[2] * heading_error ** 2 + \
                  c[3] * ω ** 2
-        return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])
+        return cs.Function("L_cost", [X, u, target_v], [L_cost])
