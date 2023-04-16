@@ -87,16 +87,6 @@ class KinematicBicyclePacejka:
             self.cr2
         )
 
-        self.X_0 = np.array([
-            0,  # x
-            0.2,  # y
-            0,  # φ
-            0.1,  # vx
-            0,  # vy
-            0  # ω
-        ])
-        self.u_0 = np.array([0, 0])
-
         self.f = None
         self.f_d = None
 
@@ -185,17 +175,24 @@ class KinematicBicyclePacejka:
         return (a < b) * a + (1 - (a < b)) * b
 
     def find_nearest_point(self, size: int, vehicle_position: cs.SX, centerline: cs.SX):
-        dist = cs.reshape(cs.sqrt((centerline - vehicle_position) ** 2), (size, 1))
+        diff = centerline - cs.repmat(vehicle_position.T, size, 1)
+        squared_diff = diff ** 2
+        sum_squared_diff = cs.sum2(squared_diff)
+        dist = cs.sqrt(sum_squared_diff)
 
         # Find the index of the minimum value in the dist vector
         min_val = dist[0]
-        idx = 0
-        for i in range(1, size):
+        nearest_point = centerline[0, :]
+        previous_point = centerline[0, :]
+        next_point = centerline[1, :]
+        for i in range(1, size - 1):
             is_min = cs.if_else(dist[i] < min_val, 1, 0)
             min_val = cs.if_else(is_min, dist[i], min_val)
-            idx = cs.if_else(is_min, i, idx)
+            nearest_point = cs.if_else(is_min, centerline[i, :], nearest_point)
+            previous_point = cs.if_else(is_min, centerline[i - 1, :], previous_point)
+            next_point = cs.if_else(is_min, centerline[i + 1, :], next_point)
 
-        return idx
+        return nearest_point, previous_point, next_point
 
     def compute_errors(
             self,
@@ -205,28 +202,27 @@ class KinematicBicyclePacejka:
             centerline_flat: cs.SX
     ):
         if isinstance(centerline_flat, np.ndarray):
-            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='C')
+            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='F')
         else:
             centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2))
 
         # find the nearest point on centerline
-        idx = self.find_nearest_point(size, vehicle_position, centerline)
-        nearest_point = centerline[idx].T
-        previous_point = centerline[idx - 1].T
-        next_point = centerline[idx + 1].T
-
+        nearest_point, previous_point, next_point = self.find_nearest_point(size, vehicle_position, centerline)
+        nearest_point = cs.reshape(nearest_point, vehicle_position.shape)
+        previous_point = cs.reshape(previous_point, vehicle_position.shape)
+        next_point = cs.reshape(next_point, vehicle_position.shape)
         # calculate cross-track error
         v_vec = vehicle_position - previous_point
         w_vec = (nearest_point - previous_point)
         cte = (v_vec[0] * w_vec[1] - v_vec[1] * w_vec[0])
 
         # calculate heading error
-        if cs.is_equal(nearest_point[0], nearest_point[0]):
-            desired_heading = 0
-        else:
-            desired_heading = cs.arctan2(centerline[idx + 1, 1] - centerline[idx, 1],
-                                         centerline[idx + 1, 0] - centerline[idx, 0])
-
+        # if cs.is_equal(nearest_point[0], nearest_point[0]):
+        #     desired_heading = 0
+        # else:
+        #     desired_heading = cs.arctan2(next_point[1] - nearest_point[1],
+        #                                  next_point[0] - nearest_point[0])
+        desired_heading = 0
         heading_error = desired_heading - vehicle_heading
 
         # calculate positional error
@@ -235,7 +231,7 @@ class KinematicBicyclePacejka:
         pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0])
         return cte, heading_error, pos_error
 
-    def generate_cost_fun(self, centerline_size, c=np.array([10, 50, 10, 25, 0.01])):
+    def generate_cost_fun(self, centerline_size, c=np.array([1, 10, 5, 5, 0.01])):
         x = cs.SX.sym("x")
         y = cs.SX.sym("y")
         φ = cs.SX.sym("φ")
@@ -260,6 +256,11 @@ class KinematicBicyclePacejka:
             centerline
         )
 
-        L_cost = c[1] * cte ** 2 + \
+        L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
+                 c[1] * cte ** 2 + \
+                 c[1] * pos_error ** 2 + \
                  c[2] * heading_error ** 2
+
+        # L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
+        #          c[1] * y ** 2
         return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])

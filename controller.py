@@ -25,11 +25,13 @@ class MPCController:
                 'δ': 1e-4,
                 'Σ_0': 1e5,
                 'max_time': timedelta(seconds=0.5),
+                'max_iter': 1000,
             },
             inner_solver=pa.StructuredPANOCLBFGSSolver(
                 panoc_params={
                     'stop_crit': pa.ProjGradNorm2,
                     'max_time': timedelta(seconds=0.2),
+                    'max_iter': 1000,
                     'hessian_step_size_heuristic': 15,
                 },
                 lbfgs_params={'memory': N_horiz},
@@ -47,7 +49,7 @@ class MPCController:
         print(stats['status'], stats['outer_iterations'],
               stats['inner']['iterations'], stats['elapsed_time'],
               stats['inner_convergence_failures'])
-        print(self.U)
+        # print(self.U)
         self.tot_it += stats['inner']['iterations']
         self.failures += stats['status'] != pa.SolverStatus.Converged
         # Print the Lagrange multipliers, shows that constraints are active

@@ -74,9 +74,17 @@ def alpaqa_vehicle_test():
     N_sim = 100
     N_horiz = 12
     u_dim = 2
-    centerline_size = 10000
+    centerline_size = 100
     f_d = model.dynamics()
-    y_null, u_null = model.X_0, model.u_0
+    y_null, u_null = np.array([
+            0,  # x
+            0,  # y
+            0,  # φ
+            0.1,  # vx
+            0,  # vy
+            0  # ω
+        ]), \
+        np.array([0, 0])
 
     max_drive, max_steer = 1.0, 0.32
     length, axis_front, axis_rear, front, rear, width, height, mass, inertia = \
@@ -108,7 +116,7 @@ def alpaqa_vehicle_test():
         cr1,  # cr1
         cr2  # cr2
     ]).T
-    centerline_val = np.array([[0, i / 500 - 0.1] for i in range(centerline_size)]).ravel()
+    centerline_val = np.array([[i / 100 - 0.1, 0] for i in range(centerline_size)]).ravel(order='F')
 
     L_cost = model.generate_cost_fun(centerline_size)  # stage cost
     y_init = cs.SX.sym("y_init", *y_null.shape)  # initial state
@@ -148,26 +156,27 @@ def alpaqa_vehicle_test():
     prob.C.upperbound = np.tile([max_drive, max_steer], N_horiz)
     # prob.D.lowerbound = np.zeros((6 * N_horiz,))
 
-    y_n = model.X_0
+    y_n = y_null
     y_mpc = np.empty((y_n.shape[0], N_sim))
     prob.param = np.concatenate((y_n, param, centerline_val))
     controller = MPCController(model, prob, N_horiz)
     for n in range(N_sim):
         pos = np.array((y_n[0], y_n[1])).reshape(2, 1)
-
-        print("Nearest point")
-        print(model.find_nearest_point(
+        nearest_point, previous_point, next_point = model.find_nearest_point(
             centerline_size,
             pos,
             centerline_val.reshape((centerline.shape[0] // 2, 2))
-        ))
-        print("Errors")
-        print(model.compute_errors(
+        )
+        cte, heading_error, pos_error = model.compute_errors(
             centerline_size,
             pos,
             y_n[2],
             centerline_val
-        ))
+        )
+        print("Pos: ", pos.reshape(2,))
+        print("Nearest point: ", nearest_point, "\tNext point: ", next_point, "\tPrevious point: ", previous_point)
+        print("CTE: ", cte, "\tHeading Error: ", heading_error, "\tPos Error: ", pos_error)
+        print()
 
         # Solve the optimal control problem
         U = controller(y_n)
@@ -268,7 +277,6 @@ def animations_and_graphs(res):
     plot_trajectory(x, y, φ, u, "Pacejka")
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
-
 
 
 if __name__ == '__main__':
