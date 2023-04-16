@@ -185,20 +185,17 @@ class KinematicBicyclePacejka:
         return (a < b) * a + (1 - (a < b)) * b
 
     def find_nearest_point(self, size: int, vehicle_position: cs.SX, centerline: cs.SX):
-        min_dist = cs.inf
-        idx = cs.SX.zeros(1)
-        nearest_point = cs.SX.zeros(2)
+        dist = cs.reshape(cs.sqrt((centerline - vehicle_position) ** 2), (size, 1))
 
-        for i in range(size):
-            point = centerline[i, :].T
-            dist = cs.mtimes((point - vehicle_position).T, (point - vehicle_position))
+        # Find the index of the minimum value in the dist vector
+        min_val = dist[0]
+        idx = 0
+        for i in range(1, size):
+            is_min = cs.if_else(dist[i] < min_val, 1, 0)
+            min_val = cs.if_else(is_min, dist[i], min_val)
+            idx = cs.if_else(is_min, i, idx)
 
-            cond = self.casadi_less_than(dist, min_dist)
-            min_dist = cond
-            idx = (1 - (dist < min_dist)) * idx + (dist < min_dist) * i
-            nearest_point = (1 - (dist < min_dist)) * nearest_point + (dist < min_dist) * point
-
-        return idx, nearest_point
+        return idx
 
     def compute_errors(
             self,
@@ -213,12 +210,10 @@ class KinematicBicyclePacejka:
             centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2))
 
         # find the nearest point on centerline
-        idx, nearest_point = self.find_nearest_point(size, vehicle_position, centerline)
-        nearest_point = nearest_point
-        previous_point = nearest_point
-        previous_point[1] -= 0.1
-        next_point = nearest_point
-        next_point[1] += 0.1
+        idx = self.find_nearest_point(size, vehicle_position, centerline)
+        nearest_point = centerline[idx].T
+        previous_point = centerline[idx - 1].T
+        next_point = centerline[idx + 1].T
 
         # calculate cross-track error
         v_vec = vehicle_position - previous_point

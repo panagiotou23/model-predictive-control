@@ -1,5 +1,5 @@
-from ctypes import Union
-
+import alpaqa as pa
+import casadi as cs
 import numpy as np
 from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 from matplotlib import pyplot as plt
@@ -9,8 +9,6 @@ from car_dynamics import KinematicBicyclePacejka
 from controller import mpc_controller, MPCController
 from road import Road
 from simulation import simulate_motion, plot_trajectory
-import alpaqa as pa
-import casadi as cs
 
 n, dt, v_ref = 3, 0.1, 1.0
 
@@ -270,6 +268,7 @@ def animations_and_graphs(res):
     plot_trajectory(x, y, φ, u, "Pacejka")
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
+
 
 
 if __name__ == '__main__':
