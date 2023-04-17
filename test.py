@@ -4,7 +4,7 @@ import numpy as np
 import casadi as cs
 from alpaqa.casadi_loader import generate_and_compile_casadi_problem
 
-if __name__ == '__main__':
+def casadi_test():
 
     import casadi as ca
 
@@ -88,3 +88,21 @@ if __name__ == '__main__':
 
     print(x)
     print(stats)
+
+if __name__ == '__main__':
+    import numpy as np
+
+    # Create a 2D array
+    a = np.array([[1, 2], [3, 4]])
+
+    print(a)
+    # Flatten it to a 1D array
+    a_flat = a.ravel(order='F')
+
+    # Reshape the 1D array to a 2D array with order F
+    a = a_flat.reshape((2, 2), order='F')
+
+    print(a)
+    # Output:
+    # [[1 3]
+    #  [2 4]]

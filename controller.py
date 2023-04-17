@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 import alpaqa as pa
 from datetime import timedelta
+import casadi as cs
 
 from road import Road
 
@@ -18,25 +19,35 @@ class MPCController:
         self.failures = 0
         self.U = np.tile([1, 0], N_horiz)
         self.λ = np.zeros((6 * N_horiz,))
+        # define the callback function
+        def progress_callback(info: pa.StructuredPANOCLBFGSProgressInfo):
+            print("cost: ", info.ψ, "\nProblem: ", dir(info.problem),
+                  "\nf: ", cs.print_expression(problem.eval_f))
 
-        self.solver = pa.ALMSolver(
-            alm_params={
-                'ε': 1e-4,
-                'δ': 1e-4,
-                'Σ_0': 1e5,
-                'max_time': timedelta(seconds=0.5),
-                'max_iter': 1000,
-            },
-            inner_solver=pa.StructuredPANOCLBFGSSolver(
+
+        inner_solver = pa.StructuredPANOCLBFGSSolver(
                 panoc_params={
                     'stop_crit': pa.ProjGradNorm2,
                     'max_time': timedelta(seconds=0.2),
                     'max_iter': 1000,
                     'hessian_step_size_heuristic': 15,
+                    # 'print_interval': True,
+                    # 'print_precision': True,
                 },
                 lbfgs_params={'memory': N_horiz},
-            ),
+            )
+        # inner_solver.set_progress_callback(progress_callback)
+        self.solver = pa.ALMSolver(
+            alm_params={
+                'ε': 1e-6,
+                'δ': 1e-4,
+                'Σ_0': 1e5,
+                'max_time': timedelta(seconds=0.5),
+                'max_iter': 1000,
+            },
+            inner_solver=inner_solver,
         )
+        self.info = pa.StructuredPANOCLBFGSProgressInfo
 
     def __call__(self, y_n):
         y_n = np.array(y_n).ravel()

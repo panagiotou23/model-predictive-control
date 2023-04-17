@@ -78,7 +78,7 @@ def alpaqa_vehicle_test():
     f_d = model.dynamics()
     y_null, u_null = np.array([
             0,  # x
-            0,  # y
+            0.1,  # y
             0,  # φ
             0.1,  # vx
             0,  # vy
@@ -116,9 +116,10 @@ def alpaqa_vehicle_test():
         cr1,  # cr1
         cr2  # cr2
     ]).T
-    centerline_val = np.array([[i / 100 - 0.1, 0] for i in range(centerline_size)]).ravel(order='F')
+    centerline_val = np.array([[i / 10 - 0.1, 0] for i in range(centerline_size)])
+    centerline_val = centerline_val.ravel(order='C')
 
-    L_cost = model.generate_cost_fun(centerline_size)  # stage cost
+    L_cost = model.generate_cost_fun(centerline_size, centerline_val)  # stage cost
     y_init = cs.SX.sym("y_init", *y_null.shape)  # initial state
     centerline = cs.SX.sym("centerline", centerline_size * 2, )
     U = cs.SX.sym("U", u_dim * N_horiz)  # control signals over horizon
@@ -131,7 +132,7 @@ def alpaqa_vehicle_test():
     for n in range(N_horiz):  # Apply the stage cost function to each stage
         y_n = mpc_sim[:, n]
         u_n = U_mat[:, n]
-        mpc_cost += L_cost(y_n, u_n, v_ref, centerline)
+        mpc_cost += L_cost(y_n, u_n, v_ref)
     mpc_cost_fun = cs.Function('f_mpc', [U, mpc_param], [mpc_cost])
 
     # Constraints
@@ -165,7 +166,7 @@ def alpaqa_vehicle_test():
         nearest_point, previous_point, next_point = model.find_nearest_point(
             centerline_size,
             pos,
-            centerline_val.reshape((centerline.shape[0] // 2, 2))
+            centerline_val.reshape((centerline_val.shape[0] // 2, 2), order='C')
         )
         cte, heading_error, pos_error = model.compute_errors(
             centerline_size,

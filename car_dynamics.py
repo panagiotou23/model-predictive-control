@@ -202,9 +202,9 @@ class KinematicBicyclePacejka:
             centerline_flat: cs.SX
     ):
         if isinstance(centerline_flat, np.ndarray):
-            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='F')
+            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2), order='C')
         else:
-            centerline = centerline_flat.reshape((centerline_flat.shape[0] // 2, 2))
+            centerline = cs.reshape(centerline_flat, (centerline_flat.shape[0] // 2, 2), 'C')
 
         # find the nearest point on centerline
         nearest_point, previous_point, next_point = self.find_nearest_point(size, vehicle_position, centerline)
@@ -231,7 +231,7 @@ class KinematicBicyclePacejka:
         pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0])
         return cte, heading_error, pos_error
 
-    def generate_cost_fun(self, centerline_size, c=np.array([1, 10, 5, 5, 0.01])):
+    def generate_cost_fun(self, centerline_size, centerline, c=np.array([1, 100, 1, 5, 0.01])):
         x = cs.SX.sym("x")
         y = cs.SX.sym("y")
         φ = cs.SX.sym("φ")
@@ -244,7 +244,6 @@ class KinematicBicyclePacejka:
         δ = cs.SX.sym("δ")
         u = cs.vertcat(d, δ)
 
-        centerline = cs.SX.sym("centerline", centerline_size * 2, )
 
         target_v = cs.SX.sym("target_v")
 
@@ -261,6 +260,4 @@ class KinematicBicyclePacejka:
                  c[1] * pos_error ** 2 + \
                  c[2] * heading_error ** 2
 
-        # L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
-        #          c[1] * y ** 2
-        return cs.Function("L_cost", [X, u, target_v, centerline], [L_cost])
+        return cs.Function("L_cost", [X, u, target_v], [L_cost])
