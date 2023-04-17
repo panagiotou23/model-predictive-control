@@ -171,9 +171,6 @@ class KinematicBicyclePacejka:
     ):
         return np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
-    def casadi_less_than(self, a, b):
-        return (a < b) * a + (1 - (a < b)) * b
-
     def find_nearest_point(self, size: int, vehicle_position: cs.SX, centerline: cs.SX):
         diff = centerline - cs.repmat(vehicle_position.T, size, 1)
         squared_diff = diff ** 2
@@ -218,11 +215,11 @@ class KinematicBicyclePacejka:
 
         # calculate heading error
         if cs.is_equal(next_point[0], nearest_point[0]):
-            desired_heading = 0
+            desired_heading = cs.if_else(next_point[1] < nearest_point[1], 0, np.pi)
         else:
             desired_heading = cs.arctan2(next_point[1] - nearest_point[1],
                                          next_point[0] - nearest_point[0])
-        heading_error = desired_heading - vehicle_heading
+        heading_error = self.wrap_to_pi(desired_heading - vehicle_heading)
 
         # calculate positional error
         v_vec_next = vehicle_position - nearest_point
@@ -242,7 +239,6 @@ class KinematicBicyclePacejka:
         d = cs.SX.sym("d")
         δ = cs.SX.sym("δ")
         u = cs.vertcat(d, δ)
-
 
         target_v = cs.SX.sym("target_v")
 

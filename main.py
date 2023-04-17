@@ -69,9 +69,9 @@ def alpaqa_test():
 
 
 def alpaqa_vehicle_test():
-    n, dt, v_ref = 3, 0.1, .5
+    n, dt, v_ref = 3, 0.1, 1.
     # Test
-    N_sim = 100
+    N_sim = 700
     N_horiz = 12
     u_dim = 2
     centerline_size = 100
