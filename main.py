@@ -69,7 +69,7 @@ def alpaqa_test():
 
 
 def alpaqa_vehicle_test():
-    n, dt, v_ref = 3, 0.1, 1.0
+    n, dt, v_ref = 3, 0.1, .5
     # Test
     N_sim = 100
     N_horiz = 12
@@ -77,13 +77,13 @@ def alpaqa_vehicle_test():
     centerline_size = 100
     f_d = model.dynamics()
     y_null, u_null = np.array([
-            0,  # x
-            0.1,  # y
-            0,  # φ
-            0.1,  # vx
-            0,  # vy
-            0  # ω
-        ]), \
+        0,  # x
+        0,  # y
+        0,  # φ
+        .5,  # vx
+        0,  # vy
+        0  # ω
+    ]), \
         np.array([0, 0])
 
     max_drive, max_steer = 1.0, 0.32
@@ -116,14 +116,13 @@ def alpaqa_vehicle_test():
         cr1,  # cr1
         cr2  # cr2
     ]).T
-    centerline_val = np.array([[i / 10 - 0.1, 0] for i in range(centerline_size)])
+    centerline_val = get_centerline(centerline_size, is_straight=False)
     centerline_val = centerline_val.ravel(order='C')
 
     L_cost = model.generate_cost_fun(centerline_size, centerline_val)  # stage cost
     y_init = cs.SX.sym("y_init", *y_null.shape)  # initial state
-    centerline = cs.SX.sym("centerline", centerline_size * 2, )
     U = cs.SX.sym("U", u_dim * N_horiz)  # control signals over horizon
-    mpc_param = cs.vertcat(y_init, model.params, centerline)  # all parameters
+    mpc_param = cs.vertcat(y_init, model.params)  # all parameters
     U_mat = model.input_to_matrix(U)  # Input as dim by N_horiz matrix
 
     # Cost
@@ -159,7 +158,7 @@ def alpaqa_vehicle_test():
 
     y_n = y_null
     y_mpc = np.empty((y_n.shape[0], N_sim))
-    prob.param = np.concatenate((y_n, param, centerline_val))
+    prob.param = np.concatenate((y_n, param))
     controller = MPCController(model, prob, N_horiz)
     for n in range(N_sim):
         pos = np.array((y_n[0], y_n[1])).reshape(2, 1)
@@ -174,7 +173,7 @@ def alpaqa_vehicle_test():
             y_n[2],
             centerline_val
         )
-        print("Pos: ", pos.reshape(2,))
+        print("Pos: ", pos.reshape(2, ))
         print("Nearest point: ", nearest_point, "\tNext point: ", next_point, "\tPrevious point: ", previous_point)
         print("CTE: ", cte, "\tHeading Error: ", heading_error, "\tPos Error: ", pos_error)
         print()
@@ -196,7 +195,13 @@ def alpaqa_vehicle_test():
 
     print(controller.tot_it, controller.failures)
 
+    centerline_val = centerline_val.reshape((centerline_val.shape[0] // 2, 2), order='C')
+
     plt.figure()
+    plt.plot(
+        centerline_val[:, 0],
+        centerline_val[:, 1]
+    )
     plt.plot(
         y_mpc[0, :],
         y_mpc[1, :]
@@ -278,6 +283,20 @@ def animations_and_graphs(res):
     plot_trajectory(x, y, φ, u, "Pacejka")
 
     simulate_motion(model, x, y, φ, vx, vy, u, t, "Pacejka")
+
+
+def get_centerline(size, is_straight=True):
+    if is_straight:
+        return np.array([[i / 10 - 0.1, 0] for i in range(size)])
+    else:
+        theta = np.linspace(0, 2 * np.pi, size)
+        radius = 5
+        center = [0, 0]
+
+        x = radius * np.cos(theta) + center[0]
+        y = radius * np.sin(theta) + center[1]
+        y += 5
+        return np.stack((x, y), axis=1)
 
 
 if __name__ == '__main__':

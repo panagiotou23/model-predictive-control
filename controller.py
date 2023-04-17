@@ -21,8 +21,7 @@ class MPCController:
         self.λ = np.zeros((6 * N_horiz,))
         # define the callback function
         def progress_callback(info: pa.StructuredPANOCLBFGSProgressInfo):
-            print("cost: ", info.ψ, "\nProblem: ", dir(info.problem),
-                  "\nf: ", cs.print_expression(problem.eval_f))
+            print("cost: ", info.ψ)
 
 
         inner_solver = pa.StructuredPANOCLBFGSSolver(
@@ -36,7 +35,7 @@ class MPCController:
                 },
                 lbfgs_params={'memory': N_horiz},
             )
-        # inner_solver.set_progress_callback(progress_callback)
+        inner_solver.set_progress_callback(progress_callback)
         self.solver = pa.ALMSolver(
             alm_params={
                 'ε': 1e-6,

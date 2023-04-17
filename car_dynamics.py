@@ -217,12 +217,11 @@ class KinematicBicyclePacejka:
         cte = (v_vec[0] * w_vec[1] - v_vec[1] * w_vec[0])
 
         # calculate heading error
-        # if cs.is_equal(nearest_point[0], nearest_point[0]):
-        #     desired_heading = 0
-        # else:
-        #     desired_heading = cs.arctan2(next_point[1] - nearest_point[1],
-        #                                  next_point[0] - nearest_point[0])
-        desired_heading = 0
+        if cs.is_equal(next_point[0], nearest_point[0]):
+            desired_heading = 0
+        else:
+            desired_heading = cs.arctan2(next_point[1] - nearest_point[1],
+                                         next_point[0] - nearest_point[0])
         heading_error = desired_heading - vehicle_heading
 
         # calculate positional error
