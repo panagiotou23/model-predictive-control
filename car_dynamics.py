@@ -227,7 +227,7 @@ class KinematicBicyclePacejka:
         pos_error = (v_vec_next[0] * w_vec_next[1] - v_vec_next[1] * w_vec_next[0])
         return cte, heading_error, pos_error
 
-    def generate_stage_cost_fun(self, centerline_size, centerline, target_v, c=np.array([1, 100, 1, 5, 0.01])):
+    def generate_stage_cost_fun(self, centerline_size, centerline, target_v, c=np.array([1, 100, 100, 5, 0.1, 0.01])):
         x = cs.SX.sym("x")
         y = cs.SX.sym("y")
         φ = cs.SX.sym("φ")
@@ -250,7 +250,8 @@ class KinematicBicyclePacejka:
 
         L_cost = c[0] * (cs.sqrt(vx ** 2 + vy ** 2) - target_v) ** 2 + \
                  c[1] * cte ** 2 + \
-                 c[1] * pos_error ** 2 + \
-                 c[2] * heading_error ** 2
-
+                 c[2] * pos_error ** 2 + \
+                 c[3] * heading_error ** 2 + \
+                 c[4] * δ ** 2 + \
+                 c[5] * d ** 2
         return cs.Function("L_cost", [X, u], [L_cost])

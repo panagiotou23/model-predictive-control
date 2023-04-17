@@ -23,7 +23,6 @@ def get_centerline(size, is_straight=True):
 
 
 def create_casadi_problem(model, N_horiz, centerline_size, centerline_val, v_ref, max_drive, max_steer):
-
     L_cost = model.generate_stage_cost_fun(centerline_size, centerline_val, v_ref)  # stage cost
     y_init = cs.SX.sym("y_init", model.X.shape)  # initial state
     U = cs.SX.sym("U", model.u.shape[0] * N_horiz)  # control signals over horizon
