@@ -22,11 +22,12 @@ def get_centerline(size, is_straight=True):
         return np.stack((x, y), axis=1)
 
 
-def create_casadi_problem(model, N_horiz, centerline_size, centerline_val, v_ref, max_drive, max_steer):
-    L_cost = model.generate_stage_cost_fun(centerline_size, centerline_val, v_ref)  # stage cost
+def create_casadi_problem(model, N_horiz, centerline_size, v_ref, max_drive, max_steer):
+    L_cost = model.generate_stage_cost_fun(centerline_size, v_ref)  # stage cost
     y_init = cs.SX.sym("y_init", model.X.shape)  # initial state
+    centerline = cs.SX.sym("centerline", centerline_size * 2, 1)
     U = cs.SX.sym("U", model.u.shape[0] * N_horiz)  # control signals over horizon
-    mpc_param = cs.vertcat(y_init, model.params)  # all parameters
+    mpc_param = cs.vertcat(y_init, model.params, centerline)  # all parameters
     U_mat = model.input_to_matrix(U)  # Input as dim by N_horiz matrix
 
     # Cost
@@ -35,7 +36,7 @@ def create_casadi_problem(model, N_horiz, centerline_size, centerline_val, v_ref
     for n in range(N_horiz):  # Apply the stage cost function to each stage
         y_n = mpc_sim[:, n]
         u_n = U_mat[:, n]
-        mpc_cost += L_cost(y_n, u_n)
+        mpc_cost += L_cost(y_n, u_n, centerline)
     mpc_cost_fun = cs.Function('f_mpc', [U, mpc_param], [mpc_cost])
 
     # Constraints
@@ -63,7 +64,7 @@ def alpaqa_vehicle_test():
 
     n, dt, v_ref = 3, 0.1, 1.
     # Test
-    N_sim = 200
+    N_sim = 400
     N_horiz = 12
     u_dim = 2
     centerline_size = 100
@@ -109,13 +110,13 @@ def alpaqa_vehicle_test():
         cr2  # cr2
     ]).T
     centerline_val = get_centerline(centerline_size, is_straight=False)
-    centerline_val = centerline_val.ravel(order='C')
+    centerline_val = centerline_val.ravel(order='F')
 
-    prob = create_casadi_problem(model, N_horiz, centerline_size, centerline_val, v_ref, max_drive, max_steer)
+    prob = create_casadi_problem(model, N_horiz, centerline_size, v_ref, max_drive, max_steer)
 
     y_n = y_null
     y_mpc = np.empty((y_n.shape[0], N_sim))
-    prob.param = np.concatenate((y_n, param))
+    prob.param = np.concatenate((y_n, param, centerline_val))
     controller = MPCController(model, prob, N_horiz)
     for n in range(N_sim):
         pos = np.array((y_n[0], y_n[1])).reshape(2, 1)
@@ -152,7 +153,7 @@ def alpaqa_vehicle_test():
 
     print(controller.tot_it, controller.failures)
 
-    centerline_val = centerline_val.reshape((centerline_val.shape[0] // 2, 2), order='C')
+    centerline_val = centerline_val.reshape((centerline_val.shape[0] // 2, 2), order='F')
 
     plt.figure()
     plt.plot(
