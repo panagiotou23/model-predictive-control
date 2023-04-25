@@ -70,7 +70,6 @@ def u_opf(x, y, x_obs, y_obs):
 
 
 def rotate(x, y, theta):
-    """Rotate point (x, y) by angle theta (in degrees)"""
     c, s = np.cos(theta), np.sin(theta)
     return c * x - s * y, s * x + c * y
 
