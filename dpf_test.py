@@ -4,7 +4,7 @@ from matplotlib import cm
 
 y_trgl, y_br, y_bl = 1.75, 1, 6
 x_0, y_0, a_x_max, a_y_max = 5, 3, 3, 1
-a_sta = 1e5
+a_sta = 1e8
 
 
 def plot_3d(x, y, x_obs, y_obs):
@@ -24,7 +24,11 @@ def plot_3d(x, y, x_obs, y_obs):
 
 def plot_2d(x, y, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs):
     Z = np.array(
-        [[(dnf(xi, yi, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs)) for xi in x] for yi in y]
+        [
+            [
+                (dnf(xi, yi, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs) + u_trgl(yi, y_trgl) + u_rbd(yi, y_br, y_bl))
+                for xi in x]
+            for yi in y]
     )
 
     Z = np.flipud(Z)
@@ -74,7 +78,7 @@ def rotate(x, y, theta):
     return c * x - s * y, s * x + c * y
 
 
-def dnf(x, y, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs, Af=0.01, b=1, σ_x=2, σ_y=0.5):
+def dnf(x, y, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs, Af=1000, b=1, σ_x=2, σ_y=0.5):
     U_pe = 0
     for i in range(n_obs):
         theta = φ - φ_obs[i]
@@ -115,13 +119,13 @@ def dnf(x, y, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs, Af=0.01, b=1, σ_x=2, �
 
 
 x = np.arange(-5, 20, 0.1)
-y = np.arange(-5, 5, 0.1)
+y = np.arange(-1, 8, 0.1)
 φ = 0
 v = 2
 
-n_obs = 2
-x_obs, y_obs = [10, 0], [2, 0]
-φ_obs = [np.pi / 4, 0]
-v_obs = [1, 3]
+n_obs = 1
+x_obs, y_obs = [10], [1.5]
+φ_obs = [0]
+v_obs = [1]
 
 plot_2d(x, y, φ, v, n_obs, x_obs, y_obs, φ_obs, v_obs)
