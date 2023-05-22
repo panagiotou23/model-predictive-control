@@ -3,11 +3,14 @@ import numpy as np
 
 from scipy.stats import norm
 
-sigma = 0.5
+
+def normal_distribution(x, sigma):
+    exponent = -(x ** 2) / (2 * sigma ** 2)
+    return np.exp(exponent)
 
 
-def safety_factor(Theadway, sigma=1):
-    return 2 * (1 - norm.pdf(Theadway, scale=sigma)) - 1
+def safety_factor(Theadway, sigma=1.2):
+    return 2 * (1 - normal_distribution(Theadway, sigma)) - 1
 
 
 def safety_payoff(P1, P2, v1, v2, a1, a2, Tc1, y1, LW):
@@ -72,9 +75,11 @@ def space_payoff(P1, P2, v1, v2, a1, a2, Tc1, y1, LW, initial_same_lane, sigma=0
     return Uspace
 
 
-x = np.arange(-5, 5, 0.1)
-U_safe = np.array([safety_factor(xi) for xi in x])
+Tc1 = 3
+y1 = 3
+LW = 3
 
-plt.figure()
-plt.plot(x, U_safe)
-plt.show()
+P1, v1, a1 = 10, 10, 0
+P2, v2, a2 = 15, 5, 0
+
+print(safety_payoff(P1, P2, v1, v2, a1, a2, Tc1, y1, LW))
