@@ -47,11 +47,11 @@ def safety_payoff(P1, P2, v1, v2, a1, a2, Tcl):
 
     SP_0 = safety_factor(Theadway0)
     SP_Tcl = safety_factor(TheadwayTcl)
-
+    print("T0: ", Theadway0, "\tTTcl: ", TheadwayTcl)
+    print("SP0: ", SP_0, "\t SPTcl: ", SP_Tcl)
     Usafety = 0.5 * (SP_Tcl - SP_0)
     print("P: ", P1l, "\t", P2l)
     print("Safety: ", Usafety, "\t", SP_0, "\t", SP_Tcl)
-    print(Theadway0, "\t", TheadwayTcl)
 
     return Usafety
 
@@ -126,22 +126,22 @@ LW = 3
 
 a0 = 0
 v_desired = 10
-w1, w2 = 1e3, 1e5
+w1, w2 = 1e2, 1e2
 
-Tcl = 2
+Tcl = 3
 
 P1, v1, a1 = 0, 15, 0
 P2, v2, a2 = 15, 10, 0
 
 print(
-    total_payoff(P1, P2, v1, v2, a1, a2, Tcl, True)
+    f_w(v1, a0)
 )
-
+#
 # a_vals = np.arange(-6, 4, 0.1)
 # total = np.array([
 #     total_payoff(P1, P2, v1, v2, a1, a2, Tcl, True) for a1 in a_vals
 # ])
-
+#
 # safety = np.array([
 #     safety_payoff(P1, P2, v1, v2, a1, a2, Tcl) for a1 in a_vals
 # ])
@@ -153,10 +153,10 @@ print(
 # plt.plot(a_vals, space)
 # plt.legend(['Safety', 'Space 1', 'Space 2'])
 # plt.show()
-
+#
 # plt.figure()
 # plt.plot(a_vals, total[:, 0])
-# # plt.plot(a_vals, total[:, 1])
-# # plt.plot(a_vals, total[:, 0] + total[:, 1])
+# plt.plot(a_vals, total[:, 1])
+# plt.plot(a_vals, total[:, 0] + total[:, 1])
 # plt.legend(['Payoff 1', 'Payoff 2', 'Payoff 1 + Payoff 2'])
 # plt.show()
