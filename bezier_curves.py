@@ -1,36 +1,64 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import math
 
-# Define the control points
-control_points = np.array([[0, 0], [1, 0], [2, 0], [2, 3.75], [4, 3.75], [5, 3.75]])
+h = 3.75
+L, W = 4.2, 1.8
+θ = 3.2 / 180 * np.pi
+l = 3
 
-
-# Define the Bézier curve function
-def bezier_curve(control_points, num_points=100):
-    N = len(control_points)
-    t = np.linspace(0, 1, num_points)
-
-    # Initialize an empty array for the curve points
-    curve = np.zeros((num_points, 2))
-
-    # Calculate the curve points
-    for i in range(N):
-        curve += np.outer(binom(N - 1, i) * (1 - t) ** (N - 1 - i) * t ** i, control_points[i])
-
-    return curve
+v0, v1 = 15, 10
+D1 = 10
 
 
-# Define the binomial coefficient function
-def binom(n, k):
-    return np.math.factorial(n) / (np.math.factorial(k) * np.math.factorial(n - k))
+def binomial_coefficient(n, k):
+    return math.factorial(n) / (math.factorial(k) * math.factorial(n - k))
 
 
-# Generate the Bézier curve
-curve = bezier_curve(control_points)
+def bezier_curve(j, P):
+    x, y = 0, 0
+    for i in range(0, 6):
+        c = binomial_coefficient(5, i)
+        x += c * (1 - j) ** (5 - i) * j ** i * P[0, i]
+        y += c * (1 - j) ** (5 - i) * j ** i * P[1, i]
+    return x, y
 
-# Plot the control points and the Bézier curve
-plt.figure()
-plt.plot(control_points[:, 0], control_points[:, 1], 'ro-', label='Control Points')
-plt.plot(curve[:, 0], curve[:, 1], 'b-', label='Bézier Curve')
-plt.legend()
+
+def get_bezier_control_points(i):
+    Px0 = Py0 = Py1 = Py2 = 0
+    Py3 = Py4 = Py5 = h
+
+    Li = D1
+    D01 = Li * np.cos(np.arctan2(W, 2 * 1) - θ)
+    tc1 = D01 / (v0 - v1)
+    Px2 = Px3 = v0 * tc1 - D1
+    Px5 = 2 * Px2
+    Px1 = (Px2 - Px0) / i
+    Px4 = Px5 - (Px5 - Px3) / i
+
+    Px = np.array([
+        Px0, Px1, Px2, Px3, Px4, Px5
+    ])
+    Py = np.array([
+        Py0, Py1, Py2, Py3, Py4, Py5
+    ])
+
+    tca = Px2 / (v0 - v1)
+    return np.array([Px, Py]), tca
+
+
+# Plot the Bézier curve
+plt.figure(figsize=(10, 5))
+j = np.linspace(0, 1, num=500)
+
+for i in range(1, 11):
+    P, tca = get_bezier_control_points(i)
+    curve = np.array([bezier_curve(ji, P) for ji in j])
+    plt.plot(curve[:, 0], curve[:, 1])
+
+plt.title('Bézier Curve for Lane-Changing Path')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.legend(['i=1', 'i=2', 'i=3', 'i=4', 'i=5', 'i=6', 'i=7', 'i=8', 'i=9', 'i=10'])
+plt.grid(True)
 plt.show()
