@@ -74,6 +74,21 @@ class Car:
 
         return car_in_front
 
+    def get_car_behind(self, cars):
+        car_behind = None
+        for car in cars:
+            if car.lane != 2:
+                continue
+
+            if car.x < self.x:
+                if car_behind is None:
+                    car_behind = car
+
+                if car_behind.x < car.x:
+                    car_behind = car
+
+        return car_behind
+
     def get_bezier_control_points(self, car, i=5):
         Px0 = Py0 = Py1 = Py2 = 0
         Py3 = Py4 = Py5 = self.h
@@ -144,7 +159,7 @@ class Car:
             if self.lane != car.lane and self.lane == target_lane:
                 continue
 
-            Sk = np.abs(self.get_safety_distance(car, target_lane))
+            Sk = self.get_safety_distance(car, target_lane)
             Dk = np.abs(self.x - car.x)
 
             if Dk >= np.abs(Sk):
@@ -187,23 +202,46 @@ class Car:
 
         return 0
 
-    def get_total_payoff(self, cars, target_lane, a=0.7, b=0.3, c=0.2):
+    def get_total_payoff(self, cars, target_lane, a=0.6, b=0.4):
         safety = self.get_safety_payoff(cars, target_lane)
         velocity = self.get_velocity_payoff(cars, target_lane)
-        comfort = self.get_comfort_payoff(cars, target_lane)
         total = (
                 a * safety +
                 b * velocity
-                # c * comfort
         )
-        print(
-            "Lane: ", target_lane,
-            "\tSafety: ", "{:.2f}".format(safety),
-            "\t Velocity: ", "{:.2f}".format(velocity),
-            "\tComfort: ", "{:.2f}".format(comfort),
-            " \tTotal: ", "{:.2f}".format(total)
-        )
-        return total
+        # print(
+        #     "Lane: ", target_lane,
+        #     "\tSafety: ", "{:.2f}".format(safety),
+        #     "\t Velocity: ", "{:.2f}".format(velocity),
+        #     "\tComfort: ", "{:.2f}".format(comfort),
+        #     " \tTotal: ", "{:.2f}".format(total)
+        # )
+
+        car_behind = self.get_car_behind(cars)
+        total_behind = 0
+        if car_behind is not None:
+
+            cars_for_car_behind = [car for car in cars if getattr(car, 'name', None) != car_behind.name]
+            if target_lane == 2:
+                cars_for_car_behind = np.append(
+                    cars_for_car_behind,
+                    [Car(x=ego.x, v=ego.v, lane=2)]
+                )
+
+            safety_behind = car_behind.get_safety_payoff(cars_for_car_behind, 2)
+            velocity_behind = car_behind.get_velocity_payoff(cars_for_car_behind, 2)
+            total_behind = (
+                    a * safety_behind +
+                    b * velocity_behind
+            )
+            # print(
+            #     car_behind.name,
+            #     "\t\tSafety: ", "{:.2f}".format(safety_behind),
+            #     "\t Velocity: ", "{:.2f}".format(velocity_behind),
+            #     " \tTotal: ", "{:.2f}".format(total_behind)
+            # )
+
+        return total + total_behind
 
 
 def get_cars_test_1():
@@ -314,15 +352,13 @@ def get_cars_test_3():
 if __name__ == '__main__':
     ego, cars = get_cars_test_1()
 
-    plt.figure()
-
     dt = 0.1
     t = np.arange(0, 5, dt)
     payoff = np.zeros([t.size, 2])
-
-    print("Ego: ", ego.x)
-    for car in cars:
-        print(car.name, ": ", car.x)
+    gap = np.zeros(t.size)
+    # print("Ego: ", ego.x)
+    # for car in cars:
+    #     print(car.name, ": ", car.x)
 
     for i in range(t.size):
         payoff[i, :] = [
@@ -330,13 +366,31 @@ if __name__ == '__main__':
             ego.get_total_payoff(cars, target_lane=2)
         ]
         ego.move(dt)
-        print("Ego: ", ego.x)
+        # print("Ego: ", ego.x)
         for car in cars:
             car.move(dt)
-            print(car.name, ": ", car.x)
-        # print(payoff)
+            # print(car.name, ": ", car.x)
 
+        if ego.x > cars[2].x:
+            gap[i] = 1
+        elif cars[3].x < ego.x <= cars[2].x:
+            gap[i] = 2
+        else:
+            gap[i] = 3
+
+    for i in range(t.size):
+        if payoff[i, 1] > payoff[i, 0]:
+            print("Changing lanes at: ", t[i])
+
+    plt.figure()
+    plt.subplot(2, 1, 1)
     plt.plot(t, payoff)
-    plt.grid()
     plt.legend(["Lane 1", "Lane 2"])
+
+    plt.subplot(2, 1, 2)
+    plt.plot(t, gap, linestyle='dotted')
+    plt.plot(t, payoff[:, 1] - payoff[:, 0])
+    plt.legend(["Gap"])
+    plt.grid()
     plt.show()
+
