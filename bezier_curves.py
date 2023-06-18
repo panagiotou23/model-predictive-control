@@ -6,9 +6,10 @@ h = 3.75
 L, W = 4.2, 1.8
 θ = 3.2 / 180 * np.pi
 l = 3
+Lf = 1
 
-v0, v1 = 15, 10
-D1 = 10
+v0, v1 = 20, 10
+D1 = 50
 
 
 def binomial_coefficient(n, k):
@@ -28,10 +29,10 @@ def get_bezier_control_points(i):
     Px0 = Py0 = Py1 = Py2 = 0
     Py3 = Py4 = Py5 = h
 
-    Li = D1
-    D01 = Li * np.cos(np.arctan2(W, 2 * 1) - θ)
-    tc1 = D01 / (v0 - v1)
-    Px2 = Px3 = v0 * tc1 - D1
+    Li = Lf + l
+    Di = Li * np.cos(np.arctan2(W, 2 * Lf) - θ)
+    tc1 = D1 / (v0 - v1)
+    Px2 = Px3 = v0 * tc1 - Di
     Px5 = 2 * Px2
     Px1 = (Px2 - Px0) / i
     Px4 = Px5 - (Px5 - Px3) / i
@@ -47,18 +48,19 @@ def get_bezier_control_points(i):
     return np.array([Px, Py]), tca
 
 
-# Plot the Bézier curve
-plt.figure(figsize=(10, 5))
-j = np.linspace(0, 1, num=500)
+if __name__ == '__main__':
+    # Plot the Bézier curve
+    plt.figure(figsize=(10, 5))
+    j = np.linspace(0, 1, num=500)
 
-for i in range(1, 11):
-    P, tca = get_bezier_control_points(i)
-    curve = np.array([bezier_curve(ji, P) for ji in j])
-    plt.plot(curve[:, 0], curve[:, 1])
+    for i in range(1, 11):
+        P, tca = get_bezier_control_points(i)
+        curve = np.array([bezier_curve(ji, P) for ji in j])
+        plt.plot(curve[:, 0], curve[:, 1])
 
-plt.title('Bézier Curve for Lane-Changing Path')
-plt.xlabel('x')
-plt.ylabel('y')
-plt.legend(['i=1', 'i=2', 'i=3', 'i=4', 'i=5', 'i=6', 'i=7', 'i=8', 'i=9', 'i=10'])
-plt.grid(True)
-plt.show()
+    plt.title('Bézier Curve for Lane-Changing Path')
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.legend(['i=1', 'i=2', 'i=3', 'i=4', 'i=5', 'i=6', 'i=7', 'i=8', 'i=9', 'i=10'])
+    plt.grid(True)
+    plt.show()
