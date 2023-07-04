@@ -48,10 +48,10 @@ class MPCController:
         )
         self.info = pa.StructuredPANOCLBFGSProgressInfo
 
-    def __call__(self, y_n):
+    def __call__(self, y_n, centerline):
         y_n = np.array(y_n).ravel()
         # Set the current state as the initial state
-        self.problem.param[:y_n.shape[0]] = y_n
+        self.problem.param[:(y_n.shape[0] + centerline.shape[0])] = np.concatenate((y_n, centerline))
         # Solve the optimal control problem
         # (warm start using the previous solution and Lagrange multipliers)
         self.U, self.λ, stats = self.solver(self.problem, self.U, self.λ)
